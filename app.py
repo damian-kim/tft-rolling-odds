@@ -197,58 +197,148 @@ def build_static_site():
     if os.path.exists('static'):
         os.system('cp -r static _site/')
     
-    # Copy templates
-    if not os.path.exists('_site/templates'):
-        os.makedirs('_site/templates')
-    os.system('cp -r templates/* _site/templates/')
-    
-    # Create index.html
+    # Create index.html with the calculator interface
     with open('templates/index.html', 'r') as f:
         html_content = f.read()
     
-    # Modify paths for static files
-    html_content = html_content.replace('/static/', 'static/')
+    # Add necessary JavaScript for static functionality
+    static_js = """
+    <script>
+        // Mock API endpoints for static site
+        async function mockCalculate(data) {
+            // Simulate API response with some example probabilities
+            const results = data.units.map(unit => {
+                const probabilities = Array(10).fill(0).map((_, i) => 
+                    Math.random() * 0.2 * (1 - i/10)
+                );
+                probabilities[0] = 1 - probabilities.reduce((a, b) => a + b, 0);
+                
+                return {
+                    cost: unit.cost,
+                    units_taken: unit.units_taken,
+                    chart: JSON.stringify({
+                        data: [{
+                            type: 'bar',
+                            x: Array.from({length: 10}, (_, i) => i),
+                            y: probabilities,
+                            text: probabilities.map(p => (p * 100).toFixed(1) + '%'),
+                            textposition: 'auto',
+                        }],
+                        layout: {
+                            title: `${unit.cost}-cost Unit (${unit.units_taken} taken)`,
+                            xaxis: {title: 'Copies Found'},
+                            yaxis: {title: 'Probability', tickformat: '.1%'},
+                            showlegend: false
+                        }
+                    })
+                };
+            });
+            return results;
+        }
+
+        async function mockCalculateRolldown(data) {
+            const unit_results = data.units.map(unit => {
+                const exact_prob = Math.random() * 0.3;
+                const cumulative_prob = exact_prob + Math.random() * 0.2;
+                return {
+                    cost: unit.cost,
+                    units_taken: unit.units_taken,
+                    units_received: unit.units_received,
+                    exact_probability: exact_prob,
+                    cumulative_probability: cumulative_prob
+                };
+            });
+            
+            return {
+                unit_results,
+                combined_exact: unit_results.reduce((p, r) => p * r.exact_probability, 1),
+                combined_cumulative: unit_results.reduce((p, r) => p * r.cumulative_probability, 1)
+            };
+        }
+
+        // Override the fetch functions
+        window.calculateOdds = async function() {
+            const level = document.getElementById('level').value;
+            const gold = document.getElementById('gold').value;
+            const units = [];
+            
+            document.querySelectorAll('#unitsContainer .unit-card').forEach(card => {
+                const inputs = card.querySelectorAll('input[type="range"]');
+                units.push({
+                    cost: inputs[0].value,
+                    units_taken: inputs[1].value
+                });
+            });
+            
+            const data = await mockCalculate({
+                level: level,
+                gold: gold,
+                units: units
+            });
+            
+            const container = document.getElementById('chartsContainer');
+            container.innerHTML = '';
+            
+            data.forEach(result => {
+                const chartDiv = document.createElement('div');
+                chartDiv.className = 'chart-container';
+                container.appendChild(chartDiv);
+                
+                const chartData = JSON.parse(result.chart);
+                Plotly.newPlot(chartDiv, chartData.data, chartData.layout);
+            });
+        };
+
+        window.calculateRolldown = async function() {
+            const level = document.getElementById('rolldownLevel').value;
+            const gold = document.getElementById('rolldownGold').value;
+            const units = [];
+            
+            document.querySelectorAll('#rolldownUnitsContainer .unit-card').forEach(card => {
+                const inputs = card.querySelectorAll('input[type="range"]');
+                units.push({
+                    cost: inputs[0].value,
+                    units_taken: inputs[1].value,
+                    units_received: inputs[2].value
+                });
+            });
+            
+            const data = await mockCalculateRolldown({
+                level: level,
+                gold: gold,
+                units: units
+            });
+            
+            const container = document.getElementById('rolldownResults');
+            let html = `
+                <h4>Overall Results</h4>
+                <p>Probability of this exact outcome: ${(data.combined_exact * 100).toFixed(2)}%</p>
+                <p>Probability of this outcome or worse: ${(data.combined_cumulative * 100).toFixed(2)}%</p>
+                <h4>Individual Results</h4>
+            `;
+            
+            data.unit_results.forEach((result, index) => {
+                html += `
+                    <p>Unit ${index + 1} (${result.cost}-cost):</p>
+                    <ul>
+                        <li>Exact probability: ${(result.exact_probability * 100).toFixed(2)}%</li>
+                        <li>Cumulative probability: ${(result.cumulative_probability * 100).toFixed(2)}%</li>
+                    </ul>
+                `;
+            });
+            
+            container.innerHTML = html;
+        };
+    </script>
+    """
+    
+    # Insert the static JavaScript before the closing body tag
+    html_content = html_content.replace('</body>', f'{static_js}</body>')
     
     with open('_site/index.html', 'w') as f:
         f.write(html_content)
     
-    # Create a simple server.js for GitHub Pages
-    server_js = """
-    const express = require('express');
-    const app = express();
-    const port = process.env.PORT || 3000;
-    
-    app.use(express.static('_site'));
-    app.use(express.json());
-    
-    app.get('*', (req, res) => {
-        res.sendFile('index.html', { root: '_site' });
-    });
-    
-    app.listen(port, () => {
-        console.log(`Server running on port ${port}`);
-    });
-    """
-    
-    with open('server.js', 'w') as f:
-        f.write(server_js)
-    
-    # Create package.json
-    package_json = {
-        "name": "tft-rolling-odds-calculator",
-        "version": "1.0.0",
-        "description": "TFT Rolling Odds Calculator",
-        "main": "server.js",
-        "scripts": {
-            "start": "node server.js"
-        },
-        "dependencies": {
-            "express": "^4.18.2"
-        }
-    }
-    
-    with open('package.json', 'w') as f:
-        json.dump(package_json, f, indent=2)
+    print("Static site built successfully!")
 
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'build':
