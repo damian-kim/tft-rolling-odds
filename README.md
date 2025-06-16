@@ -2,6 +2,8 @@
 
 A web-based calculator for Teamfight Tactics (TFT) that helps players calculate the probability of finding specific units during a rolldown.
 
+<!-- Republish timestamp: 2024-03-19 16:00 -->
+
 ## Features
 
 - Calculate probabilities for finding specific units based on:
@@ -45,7 +47,7 @@ git push -u origin main
 
 3. Enable GitHub Pages in your repository settings:
    - Go to Settings > Pages
-   - Select the `gh-pages` branch as the source
+   - Select GitHub Actions as the source
    - Save the settings
 
 4. The GitHub Action will automatically build and deploy your site when you push to the main branch.
