@@ -372,42 +372,30 @@ class TFTCalculator:
         target_copies: number of copies we want to find
         num_rolls: number of shop refreshes
         """
-        if remaining_pool <= 0 or target_copies > remaining_pool:
+
+        if remaining_pool <= 0 or target_copies > remaining_pool or target_copies > 9:
             return 0.0
             
-        # Initialize DP table
-        # dp[i][j] represents probability of finding j copies in i rolls
-        dp = np.zeros((num_rolls + 1, target_copies + 1))
-        dp[0][0] = 1.0  # Base case: 0 copies in 0 rolls
+        dp = np.zeros((num_rolls + 1, target_copies + 1, remaining_pool + 1))
+        dp[0][0][remaining_pool] = 1.0  # base case
         
         # Calculate probability of finding a unit in one shop
-        def prob_for_one_shop(pool):
-            if pool <= 0:
-                return 0.0
-            M = pool
-            n = 5
-            k = 1
-            try:
-                return hypergeom.pmf(k, M, n, 1) * odds
-            except:
-                return 0.0
-            
-        # Fill DP table
-        for i in range(1, num_rolls + 1):
-            for j in range(target_copies + 1):
-                # Probability of finding a unit in this roll
-                p_find = prob_for_one_shop(remaining_pool - j)
-                
-                # Case 1: We find a unit
-                if j > 0:
-                    dp[i][j] += p_find * dp[i-1][j-1]
-                # Case 2: We don't find a unit
-                dp[i][j] += (1 - p_find) * dp[i-1][j]
-                
-        result = dp[num_rolls][target_copies]
-        if not np.isfinite(result):
-            return 0.0
-        return result
+        for r in range(1, num_rolls + 1):
+            for c in range(target_copies + 1):
+                for p in range(remaining_pool + 1):
+                    if dp[r-1][c][p] == 0:
+                        continue
+
+                    # Chance of seeing the unit in one shop (5 slots)
+                    prob_in_shop = 1 - (1 - odds * (p / self.POOL_SIZES[len(self.POOL_SIZES)])) ** 5
+
+                    # Case 1: Find the unit (if copies and pool allow)
+                    if c < target_copies and p > 0:
+                        dp[r][c+1][p-1] += dp[r-1][c][p] * prob_in_shop
+
+                    # Case 2: Don't find the unit
+                    dp[r][c][p] += dp[r-1][c][p] * (1 - prob_in_shop)
+        return float(np.sum(dp[num_rolls][target_copies]))
 
     def calculate(self):
         try:
