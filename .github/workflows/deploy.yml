@@ -4,12 +4,25 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:  # This enables manual triggering
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -24,21 +37,41 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install gunicorn
+          pip list
 
-      - name: List files
+      - name: Debug environment
         run: |
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
           ls -la
+          echo "Templates directory:"
           ls -la templates/
+          echo "Python version:"
+          python --version
 
       - name: Build static site
         run: |
-          python app.py build
+          python -c "import sys; print('Python path:', sys.path)"
+          python app.py build || {
+            echo "Build failed. Checking _site directory:"
+            ls -la _site/ || true
+            exit 1
+          }
+          echo "Build successful. Contents of _site:"
           ls -la _site/
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./_site
-          publish_branch: gh-pages
-          commit_message: "Deploy static site" 
+          path: './_site'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
+
+      - name: Show deployment URL
+        run: |
+          echo "Deployed to: ${{ steps.deployment.outputs.page_url }}" 
